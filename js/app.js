@@ -11,7 +11,7 @@ SITE.topics.forEach((t) => {
   t.all = [];
   t.sections = (t.sections || [{ title: "", videos: t.videos }]).map((s) => ({
     title: s.title || "",
-    videos: s.videos || []
+    videos: (s.videos || []).filter((v) => v.ready === "Y")
   }));
 
   t.sections.forEach((s) => {
@@ -101,11 +101,27 @@ const topicBody = (t) => {
   }
 
   const titled = t.sections.filter((s) => s.title);
-  const chips = titled.length > 1
-    ? `<div class="chips">${t.sections.map((s, n) => s.title ? `<button type="button" data-sec="${n}">${esc(s.title)}</button>` : "").join("")}</div>`
-    : "";
+  const hasTabs = titled.length > 1;
 
-  return chips + t.sections.map((s, n) => `
+  if (hasTabs) {
+    const activeSection = t.sections.findIndex((section) => section.title);
+
+    return `<div class="section-tabs" role="tablist" aria-label="Subtopics">
+      ${t.sections.map((s, n) => s.title
+        ? `<button type="button" class="section-tab${n === activeSection ? " active" : ""}" id="tab-${n}" role="tab" aria-controls="sec-${n}" aria-selected="${n === activeSection}" tabindex="${n === activeSection ? "0" : "-1"}" data-sec="${n}">
+            ${esc(s.title)}<span>${s.videos.length}</span>
+          </button>`
+        : "").join("")}
+    </div>` + t.sections.map((s, n) => s.title ? `
+      <section class="sec tab-panel" id="sec-${n}" role="tabpanel" aria-labelledby="tab-${n}" tabindex="0"${n === activeSection ? "" : " hidden"}>
+        ${s.videos.length
+          ? `<div class="grid">${s.videos.map((v) => videoCard(t, v)).join("")}</div>`
+          : `<p class="vdesc">Coming soon.</p>`}
+      </section>
+    ` : "").join("");
+  }
+
+  return t.sections.map((s, n) => `
     <section class="sec" id="sec-${n}">
       ${s.title ? `<h3 class="sec-title">${esc(s.title)}<span>${s.videos.length}</span></h3>` : ""}
       ${s.videos.length
@@ -251,11 +267,41 @@ $navLinks.addEventListener("click", (e) => {
 });
 
 $app.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-sec]");
+  const b = e.target.closest('[role="tab"][data-sec]');
   if (b) {
-    document.getElementById("sec-" + b.dataset.sec).scrollIntoView({ behavior: "smooth" });
+    selectSectionTab(b);
   }
 });
+
+$app.addEventListener("keydown", (e) => {
+  const b = e.target.closest('[role="tab"][data-sec]');
+  if (!b) return;
+
+  const tabs = [...$app.querySelectorAll('[role="tab"][data-sec]')];
+  const index = tabs.indexOf(b);
+  let nextIndex;
+
+  if (e.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+  else if (e.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+  else if (e.key === "Home") nextIndex = 0;
+  else if (e.key === "End") nextIndex = tabs.length - 1;
+  else return;
+
+  e.preventDefault();
+  tabs[nextIndex].focus();
+  selectSectionTab(tabs[nextIndex]);
+});
+
+function selectSectionTab(tab) {
+  const tabs = $app.querySelectorAll('[role="tab"][data-sec]');
+  tabs.forEach((item) => {
+    const selected = item === tab;
+    item.classList.toggle("active", selected);
+    item.setAttribute("aria-selected", String(selected));
+    item.tabIndex = selected ? 0 : -1;
+    document.getElementById(item.getAttribute("aria-controls")).hidden = !selected;
+  });
+}
 
 window.addEventListener("hashchange", () => {
   $search.value = "";
